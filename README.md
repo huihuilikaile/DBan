@@ -4,6 +4,20 @@ DBan 是一款面向 Windows 的桌面效率工具，将待办事项、密码管
 
 项目使用 Vue 3、TypeScript、Tauri 2 和 Rust 开发。应用默认驻留系统托盘，支持顶部识别区域呼出、全局快捷键和紧凑胶囊模式。
 
+## 界面预览
+
+<p align="center">
+  <img src="docs/images/dban-todo.png" width="48%" alt="DBan 待办界面" />
+  <img src="docs/images/dban-apps.png" width="48%" alt="DBan 应用分类界面" />
+</p>
+
+<p align="center">
+  <img src="docs/images/dban-history.png" width="48%" alt="DBan 待办历史界面" />
+  <img src="docs/images/dban-capsule.png" width="48%" alt="DBan 胶囊待办界面" />
+</p>
+
+图片使用演示数据生成，不包含真实待办、账户或本机应用路径。也可以下载仓库后直接打开 [`docs/showcase.html`](docs/showcase.html)，切换查看待办、密码、应用、历史和胶囊模式。
+
 ## 功能
 
 - 待办管理：创建、编辑、完成、删除和清除待办，显示待办已创建时长。

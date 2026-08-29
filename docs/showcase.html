@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DBan 界面展示</title>
+  <link rel="stylesheet" href="../src/style.css" />
+  <style>
+    html, body { min-height: 100%; height: auto; overflow: auto; background: #111214 !important; }
+    body {
+      display: grid; place-items: center; padding: 42px;
+      background:
+        linear-gradient(rgba(255,255,255,.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,.025) 1px, transparent 1px),
+        #111214 !important;
+      background-size: 28px 28px !important;
+    }
+    .showcase { width: min(880px, 100%); display: grid; grid-template-columns: 1fr 320px; gap: 56px; align-items: center; }
+    .intro { max-width: 430px; }
+    .intro .mark {
+      width: 44px; height: 44px; display: grid; place-items: center;
+      border-radius: 10px; background: #f2f2f3; color: #0b0b0c;
+      font-size: 22px; font-weight: 750;
+    }
+    .intro h1 { margin-top: 20px; color: #f2f2f3; font-size: 40px; line-height: 1; }
+    .intro p { margin-top: 13px; color: #a2a2a8; font-size: 14px; line-height: 1.7; }
+    .view-nav { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 24px; }
+    .view-nav a {
+      border: 1px solid rgba(255,255,255,.1); border-radius: 7px;
+      padding: 7px 10px; background: #1d1d20; color: #a2a2a8;
+      text-decoration: none; font-size: 12px;
+    }
+    .view-nav a.active { background: #f2f2f3; color: #0b0b0c; }
+    .view-note { margin-top: 18px; color: #63636b; font-size: 11px; }
+    .window { position: relative; width: 320px; height: 520px; filter: drop-shadow(0 28px 48px rgba(0,0,0,.42)); }
+    .window .panel { animation: none; }
+    .panel-demo .pane { display: none; }
+    .panel-demo[data-view="todo"] .todo-pane,
+    .panel-demo[data-view="vault"] .vault-pane,
+    .panel-demo[data-view="apps"] .apps-pane,
+    .panel-demo[data-view="history"] .history-pane { display: flex; }
+    .panel-demo[data-view="apps"] .apps-pane { overflow: hidden; }
+    .tabs .tab { min-width: 0; }
+    .tabs .tab em { padding: 0 4px; }
+    .head-actions { gap: 1px; }
+    .head-actions .icon-btn { width: 26px; }
+    .todo { background: transparent; }
+    .todo .del { opacity: 1; }
+    .todo-age { font-size: 8.5px; max-width: 105px; }
+    .vact { opacity: 1; pointer-events: auto; }
+    .apps-grid { grid-template-columns: repeat(4, 1fr); }
+    .ai { font-size: 17px; }
+    .history-item { background: var(--elev); }
+    .capsule-demo { display: none; width: 320px; height: 520px; align-items: start; justify-content: center; padding-top: 44px; }
+    .capsule-demo.active { display: flex; }
+    .capsule-demo .capsule-root { position: relative; inset: auto; }
+    .capsule-demo .capsule { animation: none; }
+    .capsule-demo .capsule-pop { height: 215px; flex: none; }
+    .capsule-demo .cp-item:nth-child(odd) { background: var(--elev); }
+    .demo-app-blue { color: #45a6f3; }
+    .demo-app-green { color: #48c774; }
+    .demo-app-red { color: #ec5a5a; }
+    .demo-app-gold { color: #e2a84b; }
+    @media (max-width: 760px) {
+      body { padding: 28px 18px; }
+      .showcase { grid-template-columns: 1fr; gap: 30px; justify-items: center; }
+      .intro { text-align: center; }
+      .intro .mark { margin-inline: auto; }
+      .view-nav { justify-content: center; }
+    }
+  </style>
+</head>
+<body>
+  <main class="showcase">
+    <section class="intro">
+      <div class="mark">✓</div>
+      <h1>DBan</h1>
+      <p>停靠在屏幕顶部的 Windows 桌面效率面板。集中管理待办、密码、应用分类和系统媒体控制。</p>
+      <nav class="view-nav" aria-label="界面预览">
+        <a href="#todo" data-view-link="todo">待办</a>
+        <a href="#vault" data-view-link="vault">密码</a>
+        <a href="#apps" data-view-link="apps">应用</a>
+        <a href="#history" data-view-link="history">历史</a>
+        <a href="#capsule" data-view-link="capsule">胶囊</a>
+      </nav>
+      <div class="view-note">此页面使用演示数据，不读取本机 DBan 数据。</div>
+    </section>
+
+    <div class="window">
+      <div class="panel panel-demo" data-view="todo">
+        <header class="p-head">
+          <div class="brand">
+            <span class="logo">✓</span>
+            <div class="brand-text"><b>DBan</b><span>8月29日 周六</span></div>
+          </div>
+          <div class="head-actions">
+            <button class="icon-btn move-window-btn" aria-label="移动"><svg class="icon" viewBox="0 0 24 24"><path d="M12 3v18M3 12h18M8 7l4-4 4 4M8 17l4 4 4-4M7 8l-4 4 4 4M17 8l4 4-4 4" /></svg></button>
+            <button class="icon-btn active" aria-label="置顶"><svg class="icon" viewBox="0 0 24 24"><path d="M9 3h6v5l2 3v1H7v-1l2-3V3z" /><path d="M12 12v6" /></svg></button>
+            <button class="icon-btn" aria-label="胶囊"><svg class="icon" viewBox="0 0 24 24"><path d="M6 12h12" /></svg></button>
+            <button class="icon-btn" aria-label="隐藏"><svg class="icon" viewBox="0 0 24 24"><path d="M6 15l6-6 6 6" /></svg></button>
+            <button class="icon-btn" aria-label="设置">•••</button>
+          </div>
+        </header>
+
+        <nav class="tabs">
+          <button class="tab" data-tab="todo">待办 <em>3</em></button>
+          <button class="tab" data-tab="vault">密码 <em>3</em></button>
+          <button class="tab" data-tab="apps">应用 <em>8</em></button>
+          <button class="tab" data-tab="history">历史 <em>2</em></button>
+        </nav>
+
+        <section class="pane todo-pane">
+          <div class="addrow"><input placeholder="添加待办，回车确认…" /><button class="addbtn">＋</button></div>
+          <ul class="todo-list">
+            <li class="todo"><button class="chk"></button><span class="txt">完善 GitHub 项目文档</span><time class="todo-age">已创建 18分钟</time></li>
+            <li class="todo"><button class="chk"></button><span class="txt">测试双屏顶部呼出区域</span><time class="todo-age">已创建 2小时6分钟</time></li>
+            <li class="todo done"><button class="chk"><svg class="icon" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5" /></svg></button><span class="txt">编译 Windows Release</span><time class="todo-age">已创建 1天1小时0分钟</time></li>
+          </ul>
+          <div class="todo-foot"><span>2 项待办 · 1 已完成</span><button>清除已完成</button></div>
+        </section>
+
+        <section class="pane vault-pane">
+          <div class="vault-tip">密码加密存放于 Windows 凭据管理器（DPAPI），本列表仅保存条目信息。</div>
+          <ul class="vault-list">
+            <li class="vault"><div class="vmeta"><b>GitHub</b><span class="acc">developer@example.com</span></div><div class="vact"><button>▣</button><button>◉</button><button>×</button></div></li>
+            <li class="vault"><div class="vmeta"><b>开发服务器</b><span class="acc">admin</span></div><div class="vact"><button>▣</button><button>◉</button><button>×</button></div></li>
+            <li class="vault"><div class="vmeta"><b>邮箱</b><span class="acc">demo@example.com</span></div><div class="vact"><button>▣</button><button>◉</button><button>×</button></div></li>
+          </ul>
+          <button class="addtile">＋ 添加账号密码</button>
+        </section>
+
+        <section class="pane apps-pane">
+          <div class="apps-scroll">
+            <div class="apps-grid">
+              <div class="app"><span class="ai demo-app-blue">VS</span><span class="al">VS Code</span></div>
+              <div class="app"><span class="ai demo-app-green">WX</span><span class="al">微信</span></div>
+              <div class="app"><span class="ai demo-app-red">NM</span><span class="al">网易云音乐</span></div>
+              <div class="app"><span class="ai demo-app-blue">ED</span><span class="al">Edge</span></div>
+              <div class="app"><span class="ai demo-app-gold">TM</span><span class="al">终端</span></div>
+              <div class="app"><span class="ai demo-app-blue">FG</span><span class="al">Figma</span></div>
+              <div class="app"><span class="ai demo-app-green">EX</span><span class="al">资源管理器</span></div>
+              <div class="app"><span class="ai demo-app-red">DB</span><span class="al">DBan</span></div>
+            </div>
+            <button class="addtile">＋ 添加应用（或拖入 .exe / .lnk）</button>
+          </div>
+          <nav class="app-categories"><button class="category-tab active">全部 <em>8</em></button><button class="category-tab">开发 <em>4</em></button><button class="category-tab">沟通 <em>2</em></button><button class="category-tab">工具 <em>2</em></button></nav>
+        </section>
+
+        <section class="pane history-pane">
+          <ol class="history-list">
+            <li class="history-item"><span class="history-check">✓</span><div class="history-content"><span class="history-text">完成首次 GitHub 发布</span><time>2026.08.29/11:35 -&gt; 2026.08.29/12:22</time></div></li>
+            <li class="history-item"><span class="history-check">✓</span><div class="history-content"><span class="history-text">修复胶囊窗口背景与提示</span><time>2026.08.28/20:10 -&gt; 2026.08.29/09:46</time></div></li>
+          </ol>
+        </section>
+
+        <div class="player">
+          <span class="p-eq playing"><i></i><i></i><i></i><i></i></span>
+          <span class="p-mini"><b>演示曲目</b> · DBan</span>
+          <div class="ctrl"><button>↻</button><button>‹</button><button class="play">Ⅱ</button><button>›</button></div>
+        </div>
+      </div>
+
+      <div class="capsule-demo">
+        <div class="capsule-root">
+          <div class="capsule">
+            <span class="c-logo">✓</span><span class="c-eq"><i></i><i></i><i></i></span>
+            <span class="c-txt"><b>2 待办</b> · ♪ 演示曲目</span>
+            <button class="c-toggle expanded" aria-label="隐藏待办"><svg class="icon" viewBox="0 0 24 24"><path d="m7 10 5 5 5-5" /></svg></button>
+          </div>
+          <div class="capsule-pop">
+            <div class="cp-title">待办 · 2 项未完成</div>
+            <div class="cp-item"><span class="dot"></span><span class="cp-txt">完善 GitHub 项目文档</span></div>
+            <div class="cp-item"><span class="dot"></span><span class="cp-txt">测试双屏顶部呼出区域</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+  <script>
+    const allowed = ["todo", "vault", "apps", "history", "capsule"];
+
+    function renderView() {
+      const requested = location.hash.slice(1);
+      const view = allowed.includes(requested) ? requested : "todo";
+      const panel = document.querySelector(".panel-demo");
+      panel.dataset.view = view;
+      panel.style.display = view === "capsule" ? "none" : "flex";
+      document.querySelector(".capsule-demo").classList.toggle("active", view === "capsule");
+      document.querySelectorAll(".tab").forEach((tab) => tab.classList.toggle("active", tab.dataset.tab === view));
+      document.querySelectorAll("[data-view-link]").forEach((link) => link.classList.toggle("active", link.dataset.viewLink === view));
+    }
+
+    window.addEventListener("hashchange", renderView);
+    renderView();
+  </script>
+</body>
+</html>
