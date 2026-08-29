@@ -1,0 +1,17 @@
+node_modules/
+dist/
+src-tauri/target/
+src-tauri/gen/
+
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+*.local
+*.log
+*.tmp
+*.zcode-session
+
+.env
+.env.*
+!.env.example

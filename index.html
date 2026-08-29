@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>DBan</title>
+    <script>
+      // 调试探针：把前端错误（含调用栈首行）写进窗口标题，便于无障碍树读取
+      function fmtErr(r) {
+        const msg = (r && r.message) || String(r);
+        const stack = ((r && r.stack) || "").split("\n").filter(Boolean);
+        const at = stack.find((l) => l.includes("store.ts") || l.includes("App.vue") || l.includes("index.html")) || stack[1] || "";
+        return (msg + " § " + at.trim()).slice(0, 180);
+      }
+      window.addEventListener("error", (e) => {
+        document.title = "ERR " + fmtErr(e);
+      });
+      window.addEventListener("unhandledrejection", (e) => {
+        document.title = "REJ " + fmtErr(e.reason);
+      });
+    </script>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
