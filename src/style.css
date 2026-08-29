@@ -217,6 +217,34 @@ input { user-select: text; }
 }
 .ctrl button:hover { color: var(--text); background: var(--elev2); }
 .ctrl .icon { width: 14px; height: 14px; }
+.volume-control { position: relative; }
+.volume-popover {
+  position: absolute; left: 50%; bottom: 27px; z-index: 60;
+  width: 40px; height: 132px; padding: 8px 7px 9px;
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+  border: 1px solid var(--panel-border); border-radius: 8px;
+  background: var(--panel-bg); box-shadow: 0 10px 28px rgba(0, 0, 0, 0.42);
+  opacity: 0; visibility: hidden; pointer-events: none;
+  transform: translate(-50%, 5px); transition: opacity 0.16s ease, transform 0.16s ease, visibility 0.16s;
+}
+.volume-control:hover .volume-popover,
+.volume-control:focus-within .volume-popover {
+  opacity: 1; visibility: visible; pointer-events: auto; transform: translate(-50%, 0);
+}
+.volume-popover output { color: var(--dim); font-size: 10px; font-variant-numeric: tabular-nums; }
+.volume-popover input[type="range"] {
+  width: 92px; height: 18px; margin: 38px 0 0;
+  appearance: none; background: transparent; cursor: pointer;
+  transform: rotate(-90deg); transform-origin: center;
+}
+.volume-popover input[type="range"]::-webkit-slider-runnable-track {
+  height: 4px; border-radius: 2px; background: var(--track);
+}
+.volume-popover input[type="range"]::-webkit-slider-thumb {
+  width: 13px; height: 13px; margin-top: -4.5px; appearance: none;
+  border: 2px solid var(--panel-bg); border-radius: 50%; background: var(--acc);
+  box-shadow: 0 0 0 1px var(--panel-border);
+}
 .ctrl .play-mode.active { color: var(--success); background: color-mix(in srgb, var(--success) 14%, transparent); }
 .ctrl .play-mode .icon { width: 15px; height: 15px; }
 .ctrl .play-mode text {
@@ -273,7 +301,7 @@ input { user-select: text; }
 .addbtn:hover { background: var(--elev2); }
 .todo-list { list-style: none; display: flex; flex-direction: column; gap: 2px; }
 .todo {
-  display: flex; align-items: center; gap: 10px;
+  display: flex; align-items: center; gap: 7px;
   padding: 8px; border-radius: 10px; transition: background var(--t-micro);
 }
 .todo:hover { background: var(--elev); }
@@ -289,7 +317,7 @@ input { user-select: text; }
 .todo .txt { flex: 1; font-size: 13px; line-height: 1.4; word-break: break-all; }
 .todo.done .txt { color: var(--faint); text-decoration: line-through; }
 .todo-age {
-  flex: none; max-width: 112px; color: var(--faint);
+  flex: none; max-width: 96px; color: var(--faint);
   font-size: 9px; line-height: 1.25; text-align: right;
   font-variant-numeric: tabular-nums; white-space: nowrap;
 }
@@ -309,6 +337,10 @@ input { user-select: text; }
 .del .icon { width: 13px; height: 13px; }
 .todo:hover .del { opacity: 1; }
 .del:hover { color: var(--netease); background: var(--elev2); }
+.todo-index {
+  flex: none; width: 18px; color: var(--faint); font-size: 10px;
+  font-variant-numeric: tabular-nums; text-align: right;
+}
 .todo-foot {
   margin-top: auto; padding-top: 10px;
   display: flex; justify-content: space-between; align-items: center;
@@ -463,6 +495,7 @@ input { user-select: text; }
   border-radius: 12px; transition: var(--t-micro); position: relative; font-family: inherit;
 }
 .app:hover { background: var(--elev); }
+.app:focus-visible { outline: 1px solid var(--acc); outline-offset: -1px; background: var(--elev); }
 .ai {
   width: 52px; height: 52px; border-radius: 12px;
   display: grid; place-items: center; font-size: 22px; font-weight: 700;

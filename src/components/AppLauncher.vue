@@ -33,6 +33,10 @@ const visibleApps = computed(() => {
   if (activeAppCategoryId.value === "all") return apps.value;
   return apps.value.filter((app) => app.categoryId === activeAppCategoryId.value);
 });
+const contextAppId = computed(() => contextMenu.value?.type === "app" ? contextMenu.value.appId : "");
+const contextAppCategoryId = computed(() => (
+  apps.value.find((app) => app.id === contextAppId.value)?.categoryId
+));
 
 function categoryCount(categoryId: string) {
   if (categoryId === "all") return apps.value.length;
@@ -251,7 +255,12 @@ onBeforeUnmount(() => {
           v-for="app in visibleApps"
           :key="app.id"
           class="app"
+          role="button"
+          tabindex="0"
+          :aria-label="`启动 ${app.name}`"
           @click="launch(app)"
+          @keydown.enter.prevent="launch(app)"
+          @keydown.space.prevent="launch(app)"
           @contextmenu.prevent.stop="openAppMenu($event, app.id)"
         >
           <span class="ai">
@@ -304,16 +313,16 @@ onBeforeUnmount(() => {
 
       <template v-else-if="contextMenu.type === 'app'">
         <div class="context-title">移动到</div>
-        <button @click="moveApp(contextMenu.appId)">
-          <span class="context-icon">{{ apps.find((app) => app.id === contextMenu.appId)?.categoryId ? "" : "✓" }}</span>
+        <button @click="moveApp(contextAppId)">
+          <span class="context-icon">{{ contextAppCategoryId ? "" : "✓" }}</span>
           未分类
         </button>
         <button
           v-for="category in appCategories"
           :key="category.id"
-          @click="moveApp(contextMenu.appId, category.id)"
+          @click="moveApp(contextAppId, category.id)"
         >
-          <span class="context-icon">{{ apps.find((app) => app.id === contextMenu.appId)?.categoryId === category.id ? "✓" : "" }}</span>
+          <span class="context-icon">{{ contextAppCategoryId === category.id ? "✓" : "" }}</span>
           {{ category.name }}
         </button>
       </template>

@@ -9,10 +9,6 @@ const editText = ref("");
 const now = ref(Date.now());
 let ageTimer: ReturnType<typeof setInterval> | undefined;
 
-const sorted = computed(() => [
-  ...todos.value.filter((t) => !t.done),
-  ...todos.value.filter((t) => t.done),
-]);
 const doneCount = computed(() => todos.value.filter((t) => t.done).length);
 
 function formatAge(createdAt: number) {
@@ -118,7 +114,7 @@ function clearDone() {
     </div>
 
     <ul class="todo-list">
-      <li v-for="t in sorted" :key="t.id" class="todo" :class="{ done: t.done, editing: editingId === t.id }" @click="startEdit(t)">
+      <li v-for="(t, index) in todos" :key="t.id" class="todo" :class="{ done: t.done, editing: editingId === t.id }" @click="startEdit(t)">
         <button class="chk" data-tooltip="完成 / 撤销" aria-label="完成或撤销" @click.stop="toggle(t.id)">
           <svg class="icon" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5" /></svg>
         </button>
@@ -140,6 +136,7 @@ function clearDone() {
         <button class="del" data-tooltip="删除" aria-label="删除" @click.stop="remove(t.id)">
           <svg class="icon" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6.5 7l1 13h9l1-13" /></svg>
         </button>
+        <span class="todo-index" :aria-label="`序号 ${index + 1}`">{{ index + 1 }}</span>
       </li>
     </ul>
 

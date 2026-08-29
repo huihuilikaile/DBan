@@ -4,6 +4,7 @@ mod hot_corner;
 mod launcher;
 mod media;
 mod secrets;
+mod volume;
 
 use serde::{Deserialize, Serialize};
 use std::{
@@ -23,10 +24,13 @@ use tauri::{
 };
 use tauri_plugin_autostart::ManagerExt as AutostartManagerExt;
 use windows::Win32::{
-    Foundation::POINT,
+    Foundation::{HWND, POINT},
     UI::{
         Input::KeyboardAndMouse::{GetAsyncKeyState, VK_LBUTTON},
-        WindowsAndMessaging::GetCursorPos,
+        WindowsAndMessaging::{
+            GetCursorPos, SetForegroundWindow, SetWindowPos, ShowWindow, HWND_NOTOPMOST,
+            HWND_TOPMOST, SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW, SW_RESTORE,
+        },
     },
 };
 
@@ -57,6 +61,7 @@ pub struct AppState {
     global_shortcut_enabled: Mutex<bool>,
     placements: Mutex<HashMap<String, MonitorPlacement>>,
     window_dragging: AtomicBool,
+    pinned: AtomicBool,
     top_trigger_width: AtomicU32,
     top_trigger_dwell_ms: AtomicU32,
 }
@@ -93,16 +98,19 @@ fn load_placements(app: &tauri::AppHandle) -> HashMap<String, MonitorPlacement> 
         .unwrap_or_default()
 }
 
-fn save_placements(app: &tauri::AppHandle, placements: &HashMap<String, MonitorPlacement>) {
+fn save_placements(
+    app: &tauri::AppHandle,
+    placements: &HashMap<String, MonitorPlacement>,
+) -> Result<(), String> {
     let Some(path) = placement_file(app) else {
-        return;
+        return Err("无法确定窗口位置配置路径".into());
     };
     if let Some(parent) = path.parent() {
-        let _ = fs::create_dir_all(parent);
+        fs::create_dir_all(parent).map_err(|e| format!("创建配置目录失败：{e}"))?;
     }
-    if let Ok(content) = serde_json::to_string_pretty(placements) {
-        let _ = fs::write(path, content);
-    }
+    let content =
+        serde_json::to_string_pretty(placements).map_err(|e| format!("序列化窗口位置失败：{e}"))?;
+    fs::write(path, content).map_err(|e| format!("保存窗口位置失败：{e}"))
 }
 
 pub(crate) fn monitor_at_point(
@@ -187,22 +195,52 @@ pub(crate) fn remembered_geometry(
 }
 
 /// 按鼠标所在显示器的 DPI 设置物理尺寸，并恢复该显示器记忆的顶部位置。
-fn resize_and_dock(app: &tauri::AppHandle, state: &State<AppState>, logical_size: (f64, f64)) {
+fn resize_and_dock(
+    app: &tauri::AppHandle,
+    state: &State<AppState>,
+    logical_size: (f64, f64),
+) -> Result<(), String> {
     let Some(win) = app.get_webview_window("main") else {
-        return;
+        return Err("no main window".into());
     };
     let monitors = win.available_monitors().unwrap_or_default();
     let cur = app.cursor_position().ok();
     let monitor = cur
         .and_then(|p| monitor_at_point(&monitors, PhysicalPosition::new(p.x as i32, p.y as i32)))
         .or_else(|| win.primary_monitor().ok().flatten());
-    let Some(m) = monitor else { return };
+    let Some(m) = monitor else {
+        return Err("未找到可用显示器".into());
+    };
     let (size, position) = remembered_geometry(logical_size, state, &m);
 
     // 先移动到目标屏，让 Windows 完成跨屏 DPI 切换，再固定最终物理尺寸和位置。
-    let _ = win.set_position(position);
-    let _ = win.set_size(size);
-    let _ = win.set_position(position);
+    win.set_position(position).map_err(|e| e.to_string())?;
+    win.set_size(size).map_err(|e| e.to_string())?;
+    win.set_position(position).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+fn show_on_top(win: &tauri::WebviewWindow, pinned: bool) -> Result<(), String> {
+    win.set_always_on_top(pinned).map_err(|e| e.to_string())?;
+    win.show().map_err(|e| e.to_string())?;
+    let hwnd = win.hwnd().map_err(|e| e.to_string())?;
+    unsafe {
+        let hwnd = HWND(hwnd.0);
+        let _ = ShowWindow(hwnd, SW_RESTORE);
+        SetWindowPos(
+            hwnd,
+            if pinned { HWND_TOPMOST } else { HWND_NOTOPMOST },
+            0,
+            0,
+            0,
+            0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW,
+        )
+        .map_err(|e| e.to_string())?;
+        let _ = SetForegroundWindow(hwnd);
+    }
+    win.set_focus().map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 pub fn apply_mode(
@@ -213,15 +251,15 @@ pub fn apply_mode(
     let win = app.get_webview_window("main").ok_or("no main window")?;
     match mode {
         "panel" => {
-            resize_and_dock(app, state, PANEL);
-            let _ = win.show();
+            resize_and_dock(app, state, PANEL)?;
+            show_on_top(&win, state.pinned.load(Ordering::Acquire))?;
         }
         "capsule" => {
-            resize_and_dock(app, state, CAPSULE);
-            let _ = win.show();
+            resize_and_dock(app, state, CAPSULE)?;
+            show_on_top(&win, state.pinned.load(Ordering::Acquire))?;
         }
         "hidden" => {
-            let _ = win.hide();
+            win.hide().map_err(|e| e.to_string())?;
         }
         _ => return Err(format!("unknown mode: {mode}")),
     }
@@ -254,10 +292,15 @@ fn get_mode_command(state: State<AppState>) -> String {
 }
 
 #[tauri::command]
-fn set_pinned_command(app: tauri::AppHandle, pinned: bool) {
-    if let Some(w) = app.get_webview_window("main") {
-        let _ = w.set_always_on_top(pinned);
-    }
+fn set_pinned_command(
+    app: tauri::AppHandle,
+    state: State<AppState>,
+    pinned: bool,
+) -> Result<(), String> {
+    let w = app.get_webview_window("main").ok_or("no main window")?;
+    w.set_always_on_top(pinned).map_err(|e| e.to_string())?;
+    state.pinned.store(pinned, Ordering::Release);
+    Ok(())
 }
 
 fn track_window_drag(app: tauri::AppHandle) {
@@ -332,7 +375,9 @@ fn track_window_drag(app: tauri::AppHandle) {
     if let Some((key, placement)) = last_placement {
         let mut placements = state.placements.lock().unwrap();
         placements.insert(key, placement);
-        save_placements(&app, &placements);
+        if let Err(e) = save_placements(&app, &placements) {
+            eprintln!("{e}");
+        }
     }
     state.window_dragging.store(false, Ordering::Release);
 }
@@ -444,12 +489,17 @@ fn set_capsule_expanded_command(
     } else {
         CAPSULE
     };
-    resize_and_dock(&app, &state, size);
-    Ok(())
+    resize_and_dock(&app, &state, size)
 }
 
 fn main() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            let state = app.state::<AppState>();
+            if let Err(e) = apply_mode(app, &state, "panel") {
+                eprintln!("第二实例呼出窗口失败：{e}");
+            }
+        }))
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
@@ -472,6 +522,7 @@ fn main() {
             global_shortcut_enabled: Mutex::new(false),
             placements: Mutex::new(HashMap::new()),
             window_dragging: AtomicBool::new(false),
+            pinned: AtomicBool::new(true),
             top_trigger_width: AtomicU32::new(360),
             top_trigger_dwell_ms: AtomicU32::new(250),
         })
@@ -493,8 +544,12 @@ fn main() {
             secrets::get_secret,
             secrets::delete_secret,
             secrets::copy_secret,
+            secrets::create_vault_entry,
+            secrets::remove_vault_entry,
             launcher::launch_app,
             launcher::add_apps,
+            volume::get_system_volume,
+            volume::set_system_volume,
         ])
         .setup(|app| {
             use tauri_plugin_global_shortcut::GlobalShortcutExt;

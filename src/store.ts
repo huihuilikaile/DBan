@@ -27,6 +27,7 @@ export const topTriggerWidth = ref(360);
 export const topTriggerDwellMs = ref(250);
 export const mode = ref<Mode>("hidden");
 export const track = ref<Track | null>(null);
+export const systemVolume = ref(50);
 
 export const DEFAULT_TOP_TRIGGER_WIDTH = 360;
 export const DEFAULT_TOP_TRIGGER_DWELL_MS = 250;
@@ -42,9 +43,20 @@ export function toast(msg: string) {
 
 /* ---------- 持久化 ---------- */
 let store: Promise<Store> | null = null;
+let writeQueue = Promise.resolve();
 function getStore() {
   store ??= Store.load("dban.json");
   return store;
+}
+
+function persist(key: string, value: unknown) {
+  const write = writeQueue.then(async () => {
+    const s = await getStore();
+    await s.set(key, value);
+    await s.save();
+  });
+  writeQueue = write.catch(() => undefined);
+  return write;
 }
 
 const SEED_TODOS: Todo[] = [
@@ -85,42 +97,42 @@ export async function initStore() {
 }
 
 export async function saveTodos() {
-  (await getStore()).set("todos", todos.value);
+  await persist("todos", todos.value);
 }
 export async function saveTodoHistory() {
-  (await getStore()).set("todoHistory", todoHistory.value);
+  await persist("todoHistory", todoHistory.value);
 }
 export async function saveVaults() {
-  (await getStore()).set("vaults", vaults.value);
+  await persist("vaults", vaults.value);
 }
 export async function saveApps() {
-  (await getStore()).set("apps", apps.value);
+  await persist("apps", apps.value);
 }
 export async function saveAppCategories() {
-  (await getStore()).set("appCategories", appCategories.value);
+  await persist("appCategories", appCategories.value);
 }
 export async function saveActiveAppCategory() {
-  (await getStore()).set("activeAppCategoryId", activeAppCategoryId.value);
+  await persist("activeAppCategoryId", activeAppCategoryId.value);
 }
 export async function saveTheme() {
-  (await getStore()).set("theme", theme.value);
+  await persist("theme", theme.value);
   document.body.classList.toggle("light", theme.value === "light");
 }
 export async function savePinned() {
-  (await getStore()).set("pinned", pinned.value);
   await invoke("set_pinned_command", { pinned: pinned.value });
+  await persist("pinned", pinned.value);
 }
 export async function saveGlobalShortcutEnabled() {
-  const s = await getStore();
+  const requested = globalShortcutEnabled.value;
   try {
-    globalShortcutEnabled.value = await invoke<boolean>("set_global_shortcut_enabled_command", {
-      enabled: globalShortcutEnabled.value,
+    const actual = await invoke<boolean>("set_global_shortcut_enabled_command", {
+      enabled: requested,
     });
-    await s.set("globalShortcutEnabled", globalShortcutEnabled.value);
-    return globalShortcutEnabled.value;
+    globalShortcutEnabled.value = actual;
+    await persist("globalShortcutEnabled", actual);
+    return actual;
   } catch (e) {
-    globalShortcutEnabled.value = false;
-    await s.set("globalShortcutEnabled", false);
+    globalShortcutEnabled.value = !requested;
     toast(`快捷键设置失败：${e}`);
     return null;
   }
@@ -128,10 +140,9 @@ export async function saveGlobalShortcutEnabled() {
 export async function saveTopTriggerSettings() {
   topTriggerWidth.value = Math.min(800, Math.max(160, Math.round(topTriggerWidth.value / 20) * 20));
   topTriggerDwellMs.value = Math.min(1000, Math.max(100, Math.round(topTriggerDwellMs.value / 50) * 50));
-  const s = await getStore();
   await Promise.all([
-    s.set("topTriggerWidth", topTriggerWidth.value),
-    s.set("topTriggerDwellMs", topTriggerDwellMs.value),
+    persist("topTriggerWidth", topTriggerWidth.value),
+    persist("topTriggerDwellMs", topTriggerDwellMs.value),
     invoke("set_top_trigger_settings_command", {
       width: topTriggerWidth.value,
       dwellMs: topTriggerDwellMs.value,
@@ -141,9 +152,9 @@ export async function saveTopTriggerSettings() {
 
 /* ---------- 模式 ---------- */
 export async function setMode(m: Mode) {
-  mode.value = m;
   try {
     await invoke("set_mode_command", { mode: m });
+    mode.value = m;
   } catch (e) {
     toast(String(e));
   }
@@ -220,4 +231,38 @@ export async function mediaCycleMode() {
   } catch (e) {
     toast(String(e));
   }
+}
+
+export async function refreshSystemVolume() {
+  try {
+    systemVolume.value = await invoke<number>("get_system_volume");
+  } catch (e) {
+    toast(`读取系统音量失败：${e}`);
+  }
+}
+
+let pendingVolume: number | null = null;
+let volumeWrite: Promise<void> | null = null;
+
+async function flushSystemVolume() {
+  while (pendingVolume !== null) {
+    const requested = pendingVolume;
+    pendingVolume = null;
+    try {
+      const actual = await invoke<number>("set_system_volume", { volume: requested });
+      if (pendingVolume === null) systemVolume.value = actual;
+    } catch (e) {
+      toast(`设置系统音量失败：${e}`);
+    }
+  }
+}
+
+export function setSystemVolume(value: number) {
+  pendingVolume = Math.min(100, Math.max(0, Math.round(value)));
+  systemVolume.value = pendingVolume;
+  volumeWrite ??= flushSystemVolume().finally(() => {
+    volumeWrite = null;
+    if (pendingVolume !== null) setSystemVolume(pendingVolume);
+  });
+  return volumeWrite;
 }

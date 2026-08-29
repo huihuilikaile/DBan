@@ -1,5 +1,5 @@
 //! SMTC（Windows 系统媒体传输控制）：捕获网易云等播放器的正在播放信息并发送控制命令。
-//! 策略：优先取 AUMID 含 "netease" 的会话，否则取第一个会话；1.5s 轮询，变化才推送。
+//! 策略：优先取正在播放的会话，同状态下优先网易云；1.5s 轮询，变化才推送。
 use serde::Serialize;
 use tauri::Emitter;
 use windows::Media::Control::{
@@ -29,20 +29,29 @@ fn com_init() {
 fn find_session() -> windows::core::Result<Option<Session>> {
     let mgr = Manager::RequestAsync()?.get()?;
     let sessions = mgr.GetSessions()?;
-    let mut fallback: Option<Session> = None;
+    let mut best: Option<(u8, Session)> = None;
     for s in sessions {
         let aumid = s
             .SourceAppUserModelId()
             .map(|h| h.to_string())
             .unwrap_or_default();
-        if aumid.to_lowercase().contains("netease") {
-            return Ok(Some(s));
-        }
-        if fallback.is_none() {
-            fallback = Some(s);
+        let playing = s
+            .GetPlaybackInfo()
+            .ok()
+            .and_then(|playback| playback.PlaybackStatus().ok())
+            .is_some_and(|status| {
+                status == GlobalSystemMediaTransportControlsSessionPlaybackStatus::Playing
+            });
+        let score = session_score(&aumid, playing);
+        if best.as_ref().is_none_or(|(current, _)| score > *current) {
+            best = Some((score, s));
         }
     }
-    Ok(fallback)
+    Ok(best.map(|(_, session)| session))
+}
+
+fn session_score(aumid: &str, playing: bool) -> u8 {
+    u8::from(playing) * 2 + u8::from(aumid.to_ascii_lowercase().contains("netease"))
 }
 
 fn read_track() -> Option<Track> {
@@ -172,7 +181,7 @@ pub fn spawn_watcher(app: tauri::AppHandle) {
 
 #[cfg(test)]
 mod tests {
-    use super::{track_signature, Track};
+    use super::{session_score, track_signature, Track};
 
     #[test]
     fn empty_media_session_has_empty_signature() {
@@ -190,5 +199,11 @@ mod tests {
         let paused = track_signature(Some(&track));
         track.playing = true;
         assert_ne!(paused, track_signature(Some(&track)));
+    }
+
+    #[test]
+    fn playing_session_beats_paused_preferred_player() {
+        assert!(session_score("spotify", true) > session_score("netease.cloudmusic", false));
+        assert!(session_score("netease.cloudmusic", true) > session_score("spotify", true));
     }
 }

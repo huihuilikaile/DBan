@@ -1,10 +1,45 @@
 //! 账号密码：密码本体存 Windows 凭据管理器（DPAPI，按用户加密），
 //! 前端只持有条目元信息。复制走剪贴板并 30 秒后自动清空。
 use keyring::Entry;
+use serde::{Deserialize, Serialize};
 use tauri::AppHandle;
 use tauri_plugin_clipboard_manager::ClipboardExt;
+use tauri_plugin_store::StoreExt;
 
 const SERVICE: &str = "DBan";
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VaultItem {
+    id: String,
+    site: String,
+    account: String,
+}
+
+fn vault_store(
+    app: &AppHandle,
+) -> Result<std::sync::Arc<tauri_plugin_store::Store<tauri::Wry>>, String> {
+    app.store("dban.json").map_err(|e| e.to_string())
+}
+
+fn load_vaults(app: &AppHandle) -> Result<Vec<VaultItem>, String> {
+    let store = vault_store(app)?;
+    match store.get("vaults") {
+        Some(value) => {
+            serde_json::from_value(value).map_err(|e| format!("读取密码元数据失败：{e}"))
+        }
+        None => Ok(Vec::new()),
+    }
+}
+
+fn save_vaults(app: &AppHandle, vaults: &[VaultItem]) -> Result<(), String> {
+    let store = vault_store(app)?;
+    store.set(
+        "vaults",
+        serde_json::to_value(vaults).map_err(|e| e.to_string())?,
+    );
+    store.save().map_err(|e| format!("保存密码元数据失败：{e}"))
+}
 
 fn entry(id: &str) -> Result<Entry, String> {
     Entry::new(SERVICE, id).map_err(|e| e.to_string())
@@ -61,6 +96,49 @@ pub fn copy_secret(app: AppHandle, id: String) -> Result<(), String> {
             let _ = h.clipboard().write_text(String::new());
         }
     });
+    Ok(())
+}
+
+#[tauri::command]
+pub fn create_vault_entry(
+    app: AppHandle,
+    id: String,
+    site: String,
+    account: String,
+    secret: String,
+) -> Result<VaultItem, String> {
+    let item = VaultItem {
+        id: id.clone(),
+        site,
+        account,
+    };
+    let mut vaults = load_vaults(&app)?;
+    if vaults.iter().any(|current| current.id == id) {
+        return Err("密码条目已存在".into());
+    }
+    save_secret(id.clone(), secret)?;
+    vaults.push(item.clone());
+    if let Err(e) = save_vaults(&app, &vaults) {
+        let _ = delete_secret(id);
+        return Err(e);
+    }
+    Ok(item)
+}
+
+#[tauri::command]
+pub fn remove_vault_entry(app: AppHandle, id: String) -> Result<(), String> {
+    let old_secret = get_secret(id.clone())?;
+    let mut vaults = load_vaults(&app)?;
+    let previous = vaults.clone();
+    vaults.retain(|item| item.id != id);
+    delete_secret(id.clone())?;
+    if let Err(e) = save_vaults(&app, &vaults) {
+        if let Some(secret) = old_secret {
+            let _ = save_secret(id, secret);
+        }
+        let _ = save_vaults(&app, &previous);
+        return Err(e);
+    }
     Ok(())
 }
 

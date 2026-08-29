@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "typecheck": "vue-tsc --noEmit",
+    "check": "pnpm typecheck && pnpm build",
     "tauri": "tauri"
   },
   "dependencies": {
@@ -19,6 +21,7 @@
     "@tauri-apps/cli": "^2",
     "@vitejs/plugin-vue": "^5",
     "typescript": "^5",
-    "vite": "^6"
+    "vite": "^6",
+    "vue-tsc": "^2"
   }
 }

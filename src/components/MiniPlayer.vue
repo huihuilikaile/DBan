@@ -1,8 +1,29 @@
 <script setup lang="ts">
-import { mediaCycleMode, mediaNext, mediaPrev, mediaToggle } from "../store";
+import { onMounted, ref } from "vue";
+import {
+  mediaCycleMode, mediaNext, mediaPrev, mediaToggle,
+  refreshSystemVolume, setSystemVolume, systemVolume,
+} from "../store";
 import type { Track } from "../store";
 
 defineProps<{ track: Track | null }>();
+
+const previousVolume = ref(50);
+
+onMounted(refreshSystemVolume);
+
+function updateVolume(event: Event) {
+  setSystemVolume(Number((event.target as HTMLInputElement).value));
+}
+
+function toggleMute() {
+  if (systemVolume.value > 0) {
+    previousVolume.value = systemVolume.value;
+    setSystemVolume(0);
+  } else {
+    setSystemVolume(previousVolume.value || 50);
+  }
+}
 </script>
 
 <template>
@@ -17,6 +38,35 @@ defineProps<{ track: Track | null }>();
       <template v-else>未捕获到正在播放的音乐</template>
     </span>
     <div class="ctrl">
+      <div class="volume-control">
+        <button
+          class="volume-button"
+          :data-tooltip="`系统音量 ${systemVolume}%`"
+          :aria-label="systemVolume === 0 ? '取消静音' : `系统音量 ${systemVolume}%`"
+          @mouseenter="refreshSystemVolume"
+          @click="toggleMute"
+        >
+          <svg class="icon" viewBox="0 0 24 24">
+            <path d="M11 5 6 9H3v6h3l5 4z" />
+            <path v-if="systemVolume > 0" d="M15 9a4 4 0 0 1 0 6" />
+            <path v-if="systemVolume > 55" d="M18 6a8 8 0 0 1 0 12" />
+            <path v-if="systemVolume === 0" d="m16 10 5 5M21 10l-5 5" />
+          </svg>
+        </button>
+        <div class="volume-popover">
+          <output>{{ systemVolume }}</output>
+          <input
+            :value="systemVolume"
+            type="range"
+            min="0"
+            max="100"
+            step="1"
+            orient="vertical"
+            aria-label="系统音量"
+            @input="updateVolume"
+          />
+        </div>
+      </div>
       <button
         class="play-mode"
         :class="{ active: track?.playMode && track.playMode !== 'sequence' }"

@@ -24,14 +24,26 @@ defineProps<{ dateText: string }>();
 const menuOpen = ref(false);
 
 async function togglePin() {
-  pinned.value = !pinned.value;
-  await savePinned();
-  toast(pinned.value ? "已置顶：面板始终在其他窗口之上" : "已取消置顶：面板不再强制置顶");
+  const previous = pinned.value;
+  pinned.value = !previous;
+  try {
+    await savePinned();
+    toast(pinned.value ? "已置顶：面板始终在其他窗口之上" : "已取消置顶：面板不再强制置顶");
+  } catch (e) {
+    pinned.value = previous;
+    toast(`置顶设置失败：${e}`);
+  }
 }
 
 async function toggleTheme() {
-  theme.value = theme.value === "dark" ? "light" : "dark";
-  await saveTheme();
+  const previous = theme.value;
+  theme.value = previous === "dark" ? "light" : "dark";
+  try {
+    await saveTheme();
+  } catch (e) {
+    theme.value = previous;
+    toast(`主题保存失败：${e}`);
+  }
 }
 
 async function toggleAutostart() {

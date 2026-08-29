@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, ref } from "vue";
 import { invoke } from "@tauri-apps/api/core";
-import { vaults, saveVaults, toast } from "../store";
+import { vaults, toast } from "../store";
 import type { VaultItem } from "../store";
 
 const showForm = ref(false);
@@ -27,16 +27,22 @@ async function add() {
   }
   const id = crypto.randomUUID();
   try {
-    await invoke("save_secret", { id, secret: p });
+    const item = await invoke<VaultItem>("create_vault_entry", { id, site: s, account: a, secret: p });
+    vaults.value.push(item);
   } catch (e) {
     toast(`保存失败：${e}`);
     return;
   }
-  vaults.value.push({ id, site: s, account: a });
-  await saveVaults();
   site.value = account.value = password.value = "";
   showForm.value = false;
   toast("已保存：密码写入 Windows 凭据管理器");
+}
+
+function closeForm() {
+  site.value = "";
+  account.value = "";
+  password.value = "";
+  showForm.value = false;
 }
 
 async function copyItem(id: string, siteName: string) {
@@ -94,9 +100,8 @@ async function confirmRemove() {
   if (!item || deleting.value) return;
   deleting.value = true;
   try {
-    await invoke("delete_secret", { id: item.id });
+    await invoke("remove_vault_entry", { id: item.id });
     vaults.value = vaults.value.filter((v) => v.id !== item.id);
-    await saveVaults();
     pendingDelete.value = null;
     toast(`已删除「${item.site}」`);
   } catch (e) {
@@ -106,7 +111,10 @@ async function confirmRemove() {
   }
 }
 
-onBeforeUnmount(hideReveal);
+onBeforeUnmount(() => {
+  hideReveal();
+  password.value = "";
+});
 </script>
 
 <template>
@@ -120,7 +128,7 @@ onBeforeUnmount(hideReveal);
       <input v-model="account" placeholder="账号 / 邮箱（可选）" maxlength="60" />
       <input v-model="password" type="password" placeholder="密码" maxlength="120" />
       <div class="row">
-        <button @click="showForm = false">取消</button>
+        <button @click="closeForm">取消</button>
         <button class="primary" @click="add">保存</button>
       </div>
     </div>

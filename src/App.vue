@@ -106,13 +106,22 @@ function handleKeydown(e: KeyboardEvent) {
 }
 
 onMounted(async () => {
-  await initStore();
-  await initEvents();
-  mode.value = await invoke<"panel" | "capsule" | "hidden">("get_mode_command");
+  try {
+    await initStore();
+  } catch (e) {
+    toast(`读取本地数据失败：${e}`);
+  }
+  try {
+    await initEvents();
+    mode.value = await invoke<"panel" | "capsule" | "hidden">("get_mode_command");
+  } catch (e) {
+    toast(`初始化系统能力失败：${e}`);
+  }
 
   // 图标迁移：用高清提取（256px）刷新已有应用条目的图标
-  if (apps.value.length) {
-    invoke<AppItem[]>("add_apps", { paths: apps.value.map((a) => a.path) }).then((added) => {
+  const missingIconPaths = apps.value.filter((app) => !app.icon).map((app) => app.path);
+  if (missingIconPaths.length) {
+    invoke<AppItem[]>("add_apps", { paths: missingIconPaths }).then((added) => {
       let changed = false;
       for (const a of added) {
         const cur = apps.value.find((x) => x.path === a.path);
@@ -122,7 +131,7 @@ onMounted(async () => {
         }
       }
       if (changed) saveApps();
-    });
+    }).catch((e) => toast(`刷新应用图标失败：${e}`));
   }
   // 禁用 webview 右键菜单
   window.addEventListener("contextmenu", preventContextMenu);
@@ -155,7 +164,7 @@ onMounted(async () => {
         activeTab.value = "apps";
         toast(`已添加 ${n} 个应用`);
       }
-    });
+    }).catch((e) => toast(`添加应用失败：${e}`));
   });
 });
 
