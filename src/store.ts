@@ -8,9 +8,25 @@ export interface TodoHistoryItem { id: string; text: string; createdAt: number; 
 export interface VaultItem { id: string; site: string; account: string }
 export interface AppItem { id: string; name: string; path: string; icon: string; categoryId?: string }
 export interface AppCategory { id: string; name: string }
-export type Mode = "panel" | "capsule" | "hidden";
+export type Mode = "panel" | "capsule" | "peek" | "hidden";
 export type PlayMode = "sequence" | "single" | "shuffle";
-export interface Track { title: string; artist: string; playing: boolean; playMode: PlayMode }
+export interface Track {
+  title: string;
+  artist: string;
+  playing: boolean;
+  playMode: PlayMode;
+  sourceId: string;
+  sourceName: string;
+}
+export interface MediaSource {
+  id: string;
+  name: string;
+  playing: boolean;
+  title: string;
+  artist: string;
+  available: boolean;
+}
+export type MediaCaptureMode = "all" | "selected";
 export type Theme = "dark" | "light";
 
 export const todos = ref<Todo[]>([]);
@@ -27,6 +43,10 @@ export const topTriggerWidth = ref(360);
 export const topTriggerDwellMs = ref(250);
 export const mode = ref<Mode>("hidden");
 export const track = ref<Track | null>(null);
+export const mediaCaptureMode = ref<MediaCaptureMode>("all");
+export const mediaSelectedSourceIds = ref<string[]>([]);
+export const mediaSources = ref<MediaSource[]>([]);
+export const mediaSourcesLoading = ref(false);
 export const systemVolume = ref(50);
 
 export const DEFAULT_TOP_TRIGGER_WIDTH = 360;
@@ -90,9 +110,17 @@ export async function initStore() {
   topTriggerDwellMs.value = Math.min(1000, Math.max(100,
     (await s.get<number>("topTriggerDwellMs")) ?? DEFAULT_TOP_TRIGGER_DWELL_MS,
   ));
+  const savedMediaCaptureMode = await s.get<MediaCaptureMode>("mediaCaptureMode");
+  mediaCaptureMode.value = savedMediaCaptureMode === "selected" ? "selected" : "all";
+  mediaSelectedSourceIds.value = uniqueSourceIds(
+    (await s.get<string[]>("mediaSelectedSourceIds")) ?? [],
+  );
+  mediaSources.value = ((await s.get<MediaSource[]>("mediaSources")) ?? [])
+    .filter((source) => source?.id?.trim())
+    .map((source) => ({ ...source, available: false, playing: false }));
   await Promise.all([
     saveTodos(), saveTodoHistory(), saveVaults(), saveApps(), saveAppCategories(), saveActiveAppCategory(), saveTheme(), savePinned(),
-    saveGlobalShortcutEnabled(), saveTopTriggerSettings(),
+    saveGlobalShortcutEnabled(), saveTopTriggerSettings(), saveMediaCaptureSettings(),
   ]);
 }
 
@@ -148,6 +176,85 @@ export async function saveTopTriggerSettings() {
       dwellMs: topTriggerDwellMs.value,
     }),
   ]);
+}
+
+function normalizeSourceId(sourceId: string) {
+  return sourceId.trim().toLocaleLowerCase();
+}
+
+function uniqueSourceIds(sourceIds: string[]) {
+  const seen = new Set<string>();
+  return sourceIds.filter((sourceId) => {
+    const normalized = normalizeSourceId(sourceId);
+    if (!normalized || seen.has(normalized)) return false;
+    seen.add(normalized);
+    return true;
+  });
+}
+
+export function isMediaSourceSelected(sourceId: string) {
+  const normalized = normalizeSourceId(sourceId);
+  return mediaSelectedSourceIds.value.some((id) => normalizeSourceId(id) === normalized);
+}
+
+export async function saveMediaCaptureSettings() {
+  mediaSelectedSourceIds.value = uniqueSourceIds(mediaSelectedSourceIds.value);
+  await Promise.all([
+    persist("mediaCaptureMode", mediaCaptureMode.value),
+    persist("mediaSelectedSourceIds", mediaSelectedSourceIds.value),
+    persist("mediaSources", mediaSources.value),
+  ]);
+  track.value = await invoke<Track | null>("media_set_filter", {
+    selectedOnly: mediaCaptureMode.value === "selected",
+    sourceIds: mediaSelectedSourceIds.value,
+  });
+}
+
+export async function refreshMediaSources() {
+  if (mediaSourcesLoading.value) return;
+  mediaSourcesLoading.value = true;
+  try {
+    type DiscoveredSource = Omit<MediaSource, "available">;
+    const discovered = await invoke<DiscoveredSource[]>("media_list_sources");
+    const currentIds = new Set(discovered.map((source) => normalizeSourceId(source.id)));
+    const unavailable = mediaSources.value
+      .filter((source) => !currentIds.has(normalizeSourceId(source.id)))
+      .map((source) => ({ ...source, playing: false, available: false }));
+    mediaSources.value = [
+      ...discovered.map((source) => ({ ...source, available: true })),
+      ...unavailable,
+    ];
+    await persist("mediaSources", mediaSources.value);
+  } catch (e) {
+    toast(`扫描媒体来源失败：${e}`);
+  } finally {
+    mediaSourcesLoading.value = false;
+  }
+}
+
+export async function setMediaCaptureMode(captureMode: MediaCaptureMode) {
+  if (mediaCaptureMode.value === captureMode) return;
+  const previous = mediaCaptureMode.value;
+  mediaCaptureMode.value = captureMode;
+  try {
+    await saveMediaCaptureSettings();
+  } catch (e) {
+    mediaCaptureMode.value = previous;
+    toast(`媒体捕获设置失败：${e}`);
+  }
+}
+
+export async function toggleMediaSource(sourceId: string) {
+  const previous = [...mediaSelectedSourceIds.value];
+  mediaSelectedSourceIds.value = isMediaSourceSelected(sourceId)
+    ? mediaSelectedSourceIds.value.filter((id) => normalizeSourceId(id) !== normalizeSourceId(sourceId))
+    : [...mediaSelectedSourceIds.value, sourceId];
+  try {
+    await saveMediaCaptureSettings();
+  } catch (e) {
+    mediaSelectedSourceIds.value = previous;
+    toast(`媒体来源设置失败：${e}`);
+  }
 }
 
 /* ---------- 模式 ---------- */

@@ -26,7 +26,7 @@
 
 - `src-tauri/src/main.rs`：应用状态、窗口模式、托盘、快捷键、窗口位置和 Tauri 命令。
 - `src-tauri/src/hot_corner.rs`：屏幕顶部识别区域和停留触发逻辑。
-- `src-tauri/src/media.rs`：Windows 系统媒体会话读取和控制。
+- `src-tauri/src/media.rs`：Windows 系统媒体会话发现、来源筛选、状态读取和控制。
 - `src-tauri/src/secrets.rs`：Windows 凭据管理器读写。
 - `src-tauri/src/launcher.rs`：应用信息提取和进程启动。
 
@@ -40,7 +40,7 @@
 - `right`：靠近当前显示器右侧工作区。
 - `free`：使用显示器宽度比例保存自由位置。
 
-顶部识别区域以记忆窗口位置为中心。默认宽度为 `360` 逻辑像素，默认停留时间为 `250ms`，前端设置会实时同步到 Rust 原子状态。
+顶部识别区域以记忆窗口位置为中心。默认宽度为 `360` 逻辑像素，默认停留时间为 `250ms`，前端设置会实时同步到 Rust 原子状态。停留达到阈值后窗口进入 `peek` 模式：完整面板位于屏幕上方，只露出带小白条的底部 `16` 逻辑像素；点击露出区域后才进入 `panel` 模式。光标离开顶部区域和露出区域后，窗口会延迟隐藏。
 
 ## 数据模型
 
@@ -57,6 +57,9 @@
 - `globalShortcutEnabled`
 - `topTriggerWidth`
 - `topTriggerDwellMs`
+- `mediaCaptureMode`
+- `mediaSelectedSourceIds`
+- `mediaSources`
 
 窗口位置单独保存在 `window-placement.json`。密码条目只在 Store 中保存站点、账户和凭据 ID，密码正文由 Windows Credential Manager 管理。
 
@@ -69,6 +72,8 @@
 - `media://update`
 
 新增命令后，需要同时更新 `tauri::generate_handler!`。新增插件权限时，还需要检查 `src-tauri/capabilities/default.json`。
+
+媒体来源使用 Windows SMTC 会话提供的 `SourceAppUserModelId` 作为稳定标识。前端保存已发现来源的历史记录，播放器未运行时仍可保留勾选；Rust 中的曲目信息和所有媒体控制命令共享同一份筛选状态。来源 ID 匹配不区分大小写。浏览器会话通常只能识别到浏览器应用，不能可靠区分网易云网页版、视频网站或其他具体标签页。
 
 ## 发布检查
 

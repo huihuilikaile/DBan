@@ -6,22 +6,34 @@ import {
   DEFAULT_TOP_TRIGGER_DWELL_MS,
   DEFAULT_TOP_TRIGGER_WIDTH,
   globalShortcutEnabled,
+  isMediaSourceSelected,
+  mediaCaptureMode,
+  mediaSources,
+  mediaSourcesLoading,
   pinned,
+  refreshMediaSources,
   theme,
   topTriggerDwellMs,
   topTriggerWidth,
   setAutostart,
+  setMediaCaptureMode,
   setMode,
   saveGlobalShortcutEnabled,
   savePinned,
   saveTopTriggerSettings,
   saveTheme,
   toast,
+  toggleMediaSource,
 } from "../store";
 
 defineProps<{ dateText: string }>();
 
 const menuOpen = ref(false);
+
+function toggleSettingsMenu() {
+  menuOpen.value = !menuOpen.value;
+  if (menuOpen.value) refreshMediaSources();
+}
 
 async function togglePin() {
   const previous = pinned.value;
@@ -106,7 +118,7 @@ function startWindowDrag(event: MouseEvent) {
       <button class="icon-btn" data-tooltip="隐藏面板（Alt + D）" aria-label="隐藏面板" @click="setMode('hidden')">
         <svg class="icon" viewBox="0 0 24 24"><path d="M6 15l6-6 6 6" /></svg>
       </button>
-      <button class="icon-btn" data-tooltip="设置" aria-label="设置" @click="menuOpen = !menuOpen">
+      <button class="icon-btn" data-tooltip="设置" aria-label="设置" @click="toggleSettingsMenu">
         <svg class="icon" viewBox="0 0 24 24" fill="currentColor" stroke="none">
           <circle cx="5" cy="12" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="19" cy="12" r="1.5" />
         </svg>
@@ -162,6 +174,51 @@ function startWindowDrag(event: MouseEvent) {
             aria-label="顶部识别停留时间"
             @change="updateTopTriggerSettings"
           />
+        </div>
+        <div class="menu-section-title media-title">
+          <span>媒体捕获</span>
+          <button
+            class="media-refresh"
+            :class="{ loading: mediaSourcesLoading }"
+            data-tooltip="重新扫描媒体播放器"
+            aria-label="重新扫描媒体播放器"
+            :disabled="mediaSourcesLoading"
+            @click.stop="refreshMediaSources"
+          >
+            <svg class="icon" viewBox="0 0 24 24"><path d="M20 7v5h-5M4 17v-5h5M6.1 9a7 7 0 0 1 11.8-2L20 9M4 15l2.1 2a7 7 0 0 0 11.8-2" /></svg>
+          </button>
+        </div>
+        <div class="media-mode" role="radiogroup" aria-label="媒体捕获范围">
+          <button
+            :class="{ active: mediaCaptureMode === 'all' }"
+            role="radio"
+            :aria-checked="mediaCaptureMode === 'all'"
+            @click="setMediaCaptureMode('all')"
+          >全部</button>
+          <button
+            :class="{ active: mediaCaptureMode === 'selected' }"
+            role="radio"
+            :aria-checked="mediaCaptureMode === 'selected'"
+            @click="setMediaCaptureMode('selected')"
+          >指定</button>
+        </div>
+        <div v-if="mediaCaptureMode === 'selected'" class="media-source-list">
+          <label v-for="source in mediaSources" :key="source.id" class="media-source">
+            <input
+              type="checkbox"
+              :checked="isMediaSourceSelected(source.id)"
+              @change="toggleMediaSource(source.id)"
+            />
+            <span class="media-source-copy">
+              <strong>{{ source.name }}</strong>
+              <small>{{ source.title || source.id }}</small>
+            </span>
+            <em v-if="source.playing">播放中</em>
+            <em v-else-if="!source.available" class="offline">未运行</em>
+          </label>
+          <div v-if="!mediaSources.length" class="media-source-empty">
+            暂未发现播放器，请先启动并播放一次音乐
+          </div>
         </div>
         <button @click="invoke('set_mode_command', { mode: 'hidden' }); menuOpen = false">
           <span class="check"></span>

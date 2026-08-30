@@ -113,7 +113,7 @@ onMounted(async () => {
   }
   try {
     await initEvents();
-    mode.value = await invoke<"panel" | "capsule" | "hidden">("get_mode_command");
+    mode.value = await invoke<"panel" | "capsule" | "peek" | "hidden">("get_mode_command");
   } catch (e) {
     toast(`初始化系统能力失败：${e}`);
   }
@@ -183,6 +183,14 @@ onBeforeUnmount(() => {
 
 <template>
   <CapsuleBar v-if="mode === 'capsule'" />
+  <button
+    v-else-if="mode === 'peek'"
+    class="panel-peek"
+    aria-label="展开 DBan 面板"
+    @click="setMode('panel')"
+  >
+    <span class="panel-peek-grip" />
+  </button>
   <div v-else-if="mode === 'panel'" class="panel">
     <PanelHeader :date-text="new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'short' })" />
 

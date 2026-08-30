@@ -36,6 +36,7 @@ use windows::Win32::{
 
 pub const PANEL: (f64, f64) = (320.0, 520.0);
 pub const CAPSULE: (f64, f64) = (220.0, 40.0);
+pub const PEEK_HEIGHT: f64 = 16.0;
 pub const EDGE: f64 = 12.0; // 距目标显示器工作区上/右边缘的逻辑像素
 pub const SNAP_DISTANCE: f64 = 18.0;
 
@@ -56,7 +57,7 @@ impl Default for MonitorPlacement {
 
 #[derive(Default)]
 pub struct AppState {
-    mode: Mutex<String>, // "panel" | "capsule" | "hidden"
+    mode: Mutex<String>, // "panel" | "capsule" | "peek" | "hidden"
     autostart_item: Mutex<Option<CheckMenuItem<tauri::Wry>>>,
     global_shortcut_enabled: Mutex<bool>,
     placements: Mutex<HashMap<String, MonitorPlacement>>,
@@ -220,6 +221,45 @@ fn resize_and_dock(
     Ok(())
 }
 
+fn peek_position(
+    panel_size: PhysicalSize<u32>,
+    panel_position: PhysicalPosition<i32>,
+    monitor_top: i32,
+    scale: f64,
+) -> PhysicalPosition<i32> {
+    let visible_height = (PEEK_HEIGHT * scale).round().max(1.0) as i32;
+    PhysicalPosition::new(
+        panel_position.x,
+        monitor_top - panel_size.height as i32 + visible_height,
+    )
+}
+
+fn resize_and_peek(app: &tauri::AppHandle, state: &State<AppState>) -> Result<(), String> {
+    let Some(win) = app.get_webview_window("main") else {
+        return Err("no main window".into());
+    };
+    let monitors = win.available_monitors().unwrap_or_default();
+    let cur = app.cursor_position().ok();
+    let monitor = cur
+        .and_then(|p| monitor_at_point(&monitors, PhysicalPosition::new(p.x as i32, p.y as i32)))
+        .or_else(|| win.primary_monitor().ok().flatten());
+    let Some(monitor) = monitor else {
+        return Err("未找到可用显示器".into());
+    };
+    let (size, docked_position) = remembered_geometry(PANEL, state, &monitor);
+    let position = peek_position(
+        size,
+        docked_position,
+        monitor.position().y,
+        monitor.scale_factor(),
+    );
+
+    win.set_position(position).map_err(|e| e.to_string())?;
+    win.set_size(size).map_err(|e| e.to_string())?;
+    win.set_position(position).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 fn show_on_top(win: &tauri::WebviewWindow, pinned: bool) -> Result<(), String> {
     win.set_always_on_top(pinned).map_err(|e| e.to_string())?;
     win.show().map_err(|e| e.to_string())?;
@@ -243,6 +283,32 @@ fn show_on_top(win: &tauri::WebviewWindow, pinned: bool) -> Result<(), String> {
     Ok(())
 }
 
+fn show_peek_without_focus(win: &tauri::WebviewWindow) -> Result<(), String> {
+    win.set_always_on_top(true).map_err(|e| e.to_string())?;
+    let hwnd = win.hwnd().map_err(|e| e.to_string())?;
+    unsafe {
+        let hwnd = HWND(hwnd.0);
+        let _ = ShowWindow(
+            hwnd,
+            windows::Win32::UI::WindowsAndMessaging::SW_SHOWNOACTIVATE,
+        );
+        SetWindowPos(
+            hwnd,
+            HWND_TOPMOST,
+            0,
+            0,
+            0,
+            0,
+            SWP_NOMOVE
+                | SWP_NOSIZE
+                | SWP_SHOWWINDOW
+                | windows::Win32::UI::WindowsAndMessaging::SWP_NOACTIVATE,
+        )
+        .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 pub fn apply_mode(
     app: &tauri::AppHandle,
     state: &State<AppState>,
@@ -257,6 +323,10 @@ pub fn apply_mode(
         "capsule" => {
             resize_and_dock(app, state, CAPSULE)?;
             show_on_top(&win, state.pinned.load(Ordering::Acquire))?;
+        }
+        "peek" => {
+            resize_and_peek(app, state)?;
+            show_peek_without_focus(&win)?;
         }
         "hidden" => {
             win.hide().map_err(|e| e.to_string())?;
@@ -526,6 +596,7 @@ fn main() {
             top_trigger_width: AtomicU32::new(360),
             top_trigger_dwell_ms: AtomicU32::new(250),
         })
+        .manage(media::MediaState::default())
         .invoke_handler(tauri::generate_handler![
             set_mode_command,
             get_mode_command,
@@ -536,6 +607,8 @@ fn main() {
             set_global_shortcut_enabled_command,
             set_top_trigger_settings_command,
             set_capsule_expanded_command,
+            media::media_list_sources,
+            media::media_set_filter,
             media::media_toggle,
             media::media_next,
             media::media_prev,
@@ -640,7 +713,7 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::{placement_geometry, MonitorPlacement, CAPSULE, PANEL};
+    use super::{peek_position, placement_geometry, MonitorPlacement, CAPSULE, PANEL};
     use tauri::{PhysicalPosition, PhysicalSize};
 
     #[test]
@@ -686,5 +759,18 @@ mod tests {
 
         assert_eq!(size, PhysicalSize::new(320, 520));
         assert_eq!(position.x, 800);
+    }
+
+    #[test]
+    fn peek_keeps_only_the_scaled_panel_bottom_on_screen() {
+        let position = peek_position(
+            PhysicalSize::new(480, 780),
+            PhysicalPosition::new(3982, -162),
+            -180,
+            1.5,
+        );
+
+        assert_eq!(position, PhysicalPosition::new(3982, -936));
+        assert_eq!(position.y + 780, -156);
     }
 }
