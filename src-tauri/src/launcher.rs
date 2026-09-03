@@ -21,31 +21,69 @@ pub struct AppEntry {
     pub icon: String, // data:image/png;base64,... 可为空（前端显示首字符头像）
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DragPathInfo {
+    pub is_file: bool,
+    pub is_directory: bool,
+    pub can_add_app: bool,
+}
+
+fn is_launcher_path(path: &std::path::Path) -> bool {
+    path.extension()
+        .and_then(|value| value.to_str())
+        .is_some_and(|extension| {
+            extension.eq_ignore_ascii_case("exe") || extension.eq_ignore_ascii_case("lnk")
+        })
+}
+
+fn wide_null(value: &std::ffi::OsStr) -> Vec<u16> {
+    value.encode_wide().chain(std::iter::once(0)).collect()
+}
+
 #[tauri::command]
-pub fn launch_app(path: String) -> Result<(), String> {
+pub fn inspect_drag_path(path: String) -> DragPathInfo {
+    let path = std::path::Path::new(&path);
+    let metadata = std::fs::metadata(path).ok();
+    let is_file = metadata.as_ref().is_some_and(|value| value.is_file());
+    let is_directory = metadata.as_ref().is_some_and(|value| value.is_dir());
+    DragPathInfo {
+        is_file,
+        is_directory,
+        can_add_app: is_file && is_launcher_path(path),
+    }
+}
+
+#[tauri::command]
+pub fn launch_app(path: String, file_path: Option<String>) -> Result<(), String> {
     let path = std::path::Path::new(&path);
     if !path.is_file() {
         return Err("应用路径不存在".into());
     }
-    let extension = path
-        .extension()
-        .and_then(|value| value.to_str())
-        .unwrap_or_default();
-    if !extension.eq_ignore_ascii_case("exe") && !extension.eq_ignore_ascii_case("lnk") {
+    if !is_launcher_path(path) {
         return Err("只允许启动 .exe 或 .lnk 文件".into());
     }
 
-    let wide: Vec<u16> = path
-        .as_os_str()
-        .encode_wide()
-        .chain(std::iter::once(0))
-        .collect();
+    let wide = wide_null(path.as_os_str());
+    let parameters = if let Some(file_path) = file_path {
+        let file = std::path::Path::new(&file_path);
+        if !file.is_file() {
+            return Err("文件不存在或不可访问".into());
+        }
+        // Windows 文件名不能包含双引号；包裹为一个参数即可保留路径中的空格。
+        Some(wide_null(std::ffi::OsStr::new(&format!("\"{file_path}\""))))
+    } else {
+        None
+    };
+    let parameter_ptr = parameters
+        .as_ref()
+        .map_or(PCWSTR::null(), |value| PCWSTR(value.as_ptr()));
     let result = unsafe {
         ShellExecuteW(
             HWND::default(),
             PCWSTR::null(),
             PCWSTR(wide.as_ptr()),
-            PCWSTR::null(),
+            parameter_ptr,
             PCWSTR::null(),
             SW_SHOWNORMAL,
         )
@@ -129,8 +167,8 @@ pub fn add_apps(app: AppHandle, paths: Vec<String>) -> Vec<AppEntry> {
     paths
         .iter()
         .filter(|p| {
-            let l = p.to_lowercase();
-            l.ends_with(".exe") || l.ends_with(".lnk")
+            let path = std::path::Path::new(p);
+            path.is_file() && is_launcher_path(path)
         })
         .map(|p| AppEntry {
             id: format!("app-{}", hash_path(p)),

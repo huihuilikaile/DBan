@@ -1,10 +1,9 @@
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, onMounted, ref } from "vue";
 import { invoke } from "@tauri-apps/api/core";
-import { getCurrentWebview } from "@tauri-apps/api/webview";
 import {
   mode, track, toastMsg, todoHistory, todos, vaults, apps,
-  activeAppCategoryId, initStore, initEvents, disposeEvents, saveApps, setMode, toast,
+  initStore, initEvents, disposeEvents, saveApps, setMode, toast,
 } from "./store";
 import type { AppItem } from "./store";
 import CapsuleBar from "./components/CapsuleBar.vue";
@@ -23,7 +22,6 @@ const tooltipY = ref(0);
 const tooltipArrowX = ref(0);
 const tooltipDirection = ref<"up" | "down">("down");
 const tooltipEl = ref<HTMLElement | null>(null);
-let unlistenDragDrop: (() => void) | undefined;
 let tooltipTarget: HTMLElement | null = null;
 let tooltipTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -143,29 +141,6 @@ onMounted(async () => {
   // Esc 隐藏面板（全局 Alt+D / 热角 / 托盘在 Rust 侧处理）
   window.addEventListener("keydown", handleKeydown);
 
-  // 拖拽 .exe / .lnk 到面板 = 添加快捷启动
-  unlistenDragDrop = await getCurrentWebview().onDragDropEvent((ev) => {
-    if (ev.payload.type !== "drop") return;
-    const paths = ev.payload.paths.filter((p) => /\.(exe|lnk)$/i.test(p));
-    if (!paths.length) return;
-    invoke<AppItem[]>("add_apps", { paths }).then((added) => {
-      let n = 0;
-      for (const a of added) {
-        if (!apps.value.some((x) => x.path === a.path)) {
-          apps.value.push({
-            ...a,
-            categoryId: activeAppCategoryId.value === "all" ? undefined : activeAppCategoryId.value,
-          });
-          n++;
-        }
-      }
-      if (n) {
-        saveApps();
-        activeTab.value = "apps";
-        toast(`已添加 ${n} 个应用`);
-      }
-    }).catch((e) => toast(`添加应用失败：${e}`));
-  });
 });
 
 onBeforeUnmount(() => {
@@ -176,7 +151,6 @@ onBeforeUnmount(() => {
   window.removeEventListener("focusout", handleTooltipBlur);
   window.removeEventListener("keydown", handleKeydown);
   hideTooltip();
-  unlistenDragDrop?.();
   disposeEvents();
 });
 </script>
@@ -211,7 +185,7 @@ onBeforeUnmount(() => {
 
     <TodoList v-show="activeTab === 'todo'" />
     <VaultList v-show="activeTab === 'vault'" />
-    <AppLauncher v-show="activeTab === 'apps'" />
+    <AppLauncher v-show="activeTab === 'apps'" :active="activeTab === 'apps'" />
     <HistoryList v-show="activeTab === 'history'" />
 
     <MiniPlayer :track="track" />

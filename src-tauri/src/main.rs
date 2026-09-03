@@ -621,6 +621,7 @@ fn main() {
             secrets::remove_vault_entry,
             launcher::launch_app,
             launcher::add_apps,
+            launcher::inspect_drag_path,
             volume::get_system_volume,
             volume::set_system_volume,
         ])
